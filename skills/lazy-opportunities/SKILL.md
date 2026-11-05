@@ -1,6 +1,6 @@
 ---
 name: lazy-opportunities
-description: "Find safe code and asset loading boundaries that defer non-critical work without harming usability."
+description: "Identifica módulos pesados que podem ser carregados sob demanda sem atrasar conteúdo crítico."
 agents:
   - name: claude-code
     supported: true
@@ -10,45 +10,59 @@ agents:
     supported: true
 ---
 
-# Lazy Loading Opportunities
+# Lazy Opportunities
 
-Identify code, images, and other resources that can be deferred until they are needed. Confirm that each candidate is outside the critical user experience and that deferral will not create a visible delay or accessibility regression.
+## Papel
 
-This is primarily static analysis: inspect eager imports, route boundaries, component usage, and event handlers. Confirm candidates with production chunk and runtime evidence.
+Inspecione imports e condições de uso para encontrar componentes pesados carregados antecipadamente apesar de só serem necessários após uma ação ou navegação. Confirme o custo no build de produção e no runtime.
 
-## Find candidates
+## O que procurar
 
-- Inspect route/component usage and production bundle or network traces.
-- Prioritize below-the-fold images, route-specific modules, and heavy features opened by explicit user interaction.
-- Keep above-the-fold content, primary navigation, and resources needed for a meaningful first render available promptly.
-- Check whether existing framework conventions already provide route splitting or image loading behavior.
-- Find heavy UI components imported at module load but rendered only after a user action, such as a chart, editor, or rarely opened dialog. These are candidates for `React.lazy()` or the framework's dynamic-import equivalent.
+- Modais, editores rich text, dashboards e relatórios gráficos importados no topo do módulo, mas renderizados apenas após interação.
+- Componentes exclusivos de rotas específicas incluídos no chunk inicial.
+- Dependências pesadas transitivas de funcionalidades raramente utilizadas.
+- Limites de carregamento já fornecidos pelo framework ou router.
 
-Bad pattern when an expensive dialog is needed only after a click:
+Um componente escondido por uma condicional ainda pode ser incluído no bundle inicial quando é importado estaticamente.
 
-```js
-import ReportEditor from './ReportEditor';
+## Anti-pattern
+
+```tsx
+import RelatorioCompleto from './RelatorioCompleto';
+
+function Tela({ mostrarRelatorio }: { mostrarRelatorio: boolean }) {
+  return mostrarRelatorio ? <RelatorioCompleto /> : null;
+}
 ```
 
-Good pattern when the project uses React and the feature is not needed for the initial render:
+Se o relatório é pesado e raramente usado, o import estático pode incluí-lo antecipadamente, mesmo quando não é renderizado.
 
-```js
-const ReportEditor = React.lazy(() => import('./ReportEditor'));
+## Boa prática com React.lazy
+
+```tsx
+import { lazy, Suspense } from 'react';
+
+const RelatorioCompleto = lazy(() => import('./RelatorioCompleto'));
+
+function Tela({ mostrarRelatorio }: { mostrarRelatorio: boolean }) {
+  return (
+    <div>
+      {mostrarRelatorio && (
+        <Suspense fallback={<Spinner />}>
+          <RelatorioCompleto />
+        </Suspense>
+      )}
+    </div>
+  );
+}
 ```
 
-Render the lazy component inside an appropriate `Suspense` boundary with a useful fallback. Do not lazy-load primary content or the likely LCP image simply to reduce the entry chunk.
+`React.lazy` requer que o módulo carregado tenha export default compatível. Ajuste o carregamento se o módulo tiver apenas exports nomeados ou se o framework definir outra convenção.
 
-## Apply carefully
+## Boas práticas e cautelas
 
-- Use the framework's established dynamic import, route-level split, or image-loading APIs.
-- Provide clear loading, empty, and error states for deferred features.
-- Avoid nested lazy boundaries that introduce request waterfalls or layout shifts.
-- Preserve keyboard access and announce asynchronous state changes where appropriate.
-- Use stable dimensions or aspect ratios for images to prevent layout movement.
-- Avoid lazy-loading an image that is likely to be the page's Largest Contentful Paint element.
-
-## Verify
-
-- Test initial render, navigation, scroll behavior, slow networks, and failed module/resource loads.
-- Compare initial transfer and LCP as well as deferred interaction latency.
-- Confirm deferred content remains discoverable and works without relying on pointer-only interaction.
+- Use um fallback útil e estável; considere Error Boundary para falha ao carregar o chunk.
+- Preserve dimensões de conteúdo quando possível para evitar layout shift.
+- Não atrase conteúdo acima da dobra, navegação essencial ou a provável imagem LCP sem evidência de que seja seguro.
+- Evite criar cascatas de chunks ou uma espera perceptível depois do clique.
+- Confirme a divisão nos chunks do build e teste rede lenta, falha de carregamento, navegação e acessibilidade.
