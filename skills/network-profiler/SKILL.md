@@ -1,6 +1,6 @@
 ---
 name: network-profiler
-description: "Guide a repeatable browser-network profiling session and produce an evidence-based findings report."
+description: "Orienta profiling de rede em runtime com Chrome DevTools, HAR ou RUM para localizar gargalos e requisições repetidas."
 agents:
   - name: claude-code
     supported: true
@@ -12,32 +12,41 @@ agents:
 
 # Network Profiler
 
-Guide a repeatable network profiling session for a web route. Use available browser developer tools or project instrumentation; do not claim to run a browser trace when none was captured.
+## Papel
 
-Use real runtime evidence from Chrome DevTools Network/Performance panels, a sanitized HAR, or field Real User Monitoring (RUM). Static inspection can suggest where to look but cannot replace a trace.
+Oriente o programador a coletar e interpretar evidência real de rede no navegador. Não afirme que capturou ou analisou um trace se ele não foi fornecido ou se a ferramenta não foi executada.
 
-## Capture protocol
+## Captura com Chrome DevTools
 
-1. Select one representative route and user journey, and record the build/environment.
-2. Choose a viewport, device profile, and network/CPU throttling appropriate to the target audience.
-3. Capture cold-cache and warm-cache runs separately; repeat runs to detect variability.
-4. Preserve a sanitized trace or HAR only when permitted by the project. Remove cookies, authorization headers, query secrets, and personal data before sharing.
-5. Record the measurement source and any limitations.
+1. Abra DevTools > **Network**, selecione a rota e reproduza uma jornada representativa.
+2. Registre navegador, build, viewport, estado de cache (frio ou aquecido), throttling de rede/CPU e número de repetições.
+3. Inspecione ordem, duração, initiator, prioridade, status, tamanho transferido, redirects e requests bloqueantes.
+4. Use **Performance** quando precisar correlacionar requisições com LCP, long tasks, layout ou interações.
+5. Compare execuções equivalentes. Separe variabilidade de uma regressão consistente.
 
-## Analyze
+## HAR e RUM
 
-- Identify navigation timing and the critical request chain.
-- Inspect request initiators, blocking, priorities, transferred/compressed sizes, and response cache directives.
-- Separate first-party application requests from third-party scripts and services.
-- Note failed requests, redirects, duplicate requests, and long-tail responses.
-- Correlate network activity with LCP, INP, and CLS where the trace supports it.
-- Compare repeated visits and interactions to identify repeated requests for the same resource or data. Check initiators and cache behavior to distinguish intentional revalidation from accidental duplicate work.
-- For RUM, segment by route, device, and relevant release where available; report distributions and sample counts rather than treating one outlier as representative.
+- HAR ajuda a compartilhar uma captura reproduzível; antes de compartilhar, remova cookies, cabeçalhos de autorização, tokens em query strings e dados pessoais. Não peça nem reproduza credenciais.
+- Em RUM, segmente por rota, dispositivo e release quando disponíveis. Inclua amostra e distribuição; não tire conclusões de um único outlier.
+- Registre limitações da captura, incluindo cache, throttling e dados que foram sanitizados.
 
-## Report format
+## Waterfalls e requisições repetidas
 
-For each finding, include: observation, evidence (request/trace location and timing), affected journey, likely impact, confidence, and a suggested next experiment. Separate confirmed root causes from hypotheses. Include capture conditions and do not include sensitive request contents.
+- Siga a cadeia crítica e procure dependências serializadas, TTFB alto, redirects e recursos bloqueantes.
+- Compare initiators e parâmetros não sensíveis para identificar requests repetidos; diferencie duplicação acidental de revalidação ou polling intencional.
+- Relacione volume, tempo e criticidade da resposta à jornada observada.
+- Payload grande só é gargalo quando sua transferência/processamento afeta a experiência medida.
 
-Bad pattern: call a large response a bottleneck based only on its size, without noting whether it is cached, transferred on the critical path, or used by the journey.
+## Cache HTTP
 
-Good pattern: cite the repeated request's initiator, count, timing, cache status, and route, then recommend checking the caller or cache policy and recapturing the same journey.
+- Inspecione `Cache-Control`, `ETag`, `Last-Modified`, status 304 e comportamento de cache do navegador/CDN.
+- Ausência de cache não é automaticamente um defeito: dados personalizados, sensíveis ou que mudam frequentemente podem exigir políticas restritivas.
+- Recomende cache apenas com regras explícitas de frescor, invalidação e privacidade. Não exponha respostas privadas em caches compartilhados.
+
+## BFF e payload
+
+Considere investigação no Backend-for-Frontend (BFF) somente quando a evidência indicar payload excessivo, chamadas redundantes, latência no servidor ou uma waterfall entre serviços. Verifique se campos desnecessários podem ser omitidos, respostas podem ser agregadas com segurança ou paginação é adequada; não recomende alterar o BFF sem identificar custo e trade-offs.
+
+## Formato do achado
+
+Inclua observação, evidência (rota, request/initiator, tempos e bytes), condições da captura, impacto provável, confiança e próximo experimento. Separe causa confirmada de hipótese e nunca inclua conteúdo sensível da request.

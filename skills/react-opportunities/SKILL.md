@@ -1,6 +1,6 @@
 ---
 name: react-opportunities
-description: "Diagnose React rendering and loading costs and recommend focused, measurable optimizations."
+description: "Investiga renderização, hooks e trabalho bloqueante na thread principal em aplicações React."
 agents:
   - name: claude-code
     supported: true
@@ -12,58 +12,88 @@ agents:
 
 # React Opportunities
 
-Inspect React performance using profiling evidence and the existing component architecture. Do not add memoization by default: first establish whether rendering or JavaScript execution is a meaningful bottleneck.
+## Papel
 
-Use static inspection to find likely causes, then distinguish those candidates from confirmed runtime cost.
+Inspecione estaticamente componentes, props e hooks para levantar hipóteses; use React Profiler e traces do navegador para confirmar custo relevante. Um padrão suspeito não é automaticamente uma causa de lentidão.
 
-## Diagnose
+## O que procurar
 
-- Reproduce the slow route or interaction and record the conditions.
-- Use React DevTools Profiler or browser performance traces to locate expensive commits, repeated renders, and long tasks.
-- Inspect component props, state ownership, context providers, list sizes, and effects associated with the measured path.
-- Distinguish React rendering cost from network delay, layout/paint, and third-party script work.
-- Look for new object/function literals passed as props to memoized or expensive children, such as `<List filters={{ status: 'active' }} />` or `<Row onSelect={() => select(id)} />`. Confirm whether child work is actually repeated before suggesting memoization.
-- Flag `async` effect callbacks, which React cannot use for cleanup, and effects that launch requests without handling cancellation, stale results, or errors.
-- Look for repeated synchronous layout reads such as `getBoundingClientRect()` inside render loops or alternating read/write DOM operations that can force layout.
+1. Objetos e arrays criados inline e passados como props, por exemplo `<Lista filtros={{ status: 'ativo' }} />`. Isso só costuma ser relevante quando invalida memoização ou inicia trabalho caro em descendentes.
+2. Funções ou callbacks inline em caminhos de renderização quentes, avaliando o impacto real e não a mera existência da função.
+3. Callback `async` diretamente em `useEffect`: o callback do efeito não deve devolver uma Promise, pois o React espera `void` ou uma função de cleanup.
+4. Atualizações de estado derivável, effects em cascata, closures obsoletas e respostas assíncronas que podem chegar fora de ordem.
+5. Leituras de layout como `getBoundingClientRect()` e `offsetHeight`, especialmente intercaladas com escritas DOM ou repetidas em loops, que podem provocar layout síncrono/thrashing.
+6. Trabalho CPU longo no thread principal, listas extensas e cálculos dispendiosos durante o render.
 
-## Improve selectively
+## Anti-pattern: props inline
 
-- Keep state close to the components that use it and avoid broad updates from frequently changing context values.
-- Stabilize expensive derived values or callbacks only where profiling shows downstream work is avoidable.
-- Use list virtualization for genuinely large rendered collections, while preserving keyboard and screen-reader access.
-- Defer non-critical work or load route/interaction-specific modules when this removes work from the critical path.
-- Avoid effect-driven state synchronization when values can be derived during render.
-- Preserve server-rendering and hydration behavior where the project uses them.
-
-Bad pattern:
-
-```jsx
-<List filters={{ status: 'active' }} />
+```tsx
+<Lista filtros={{ status: 'ativo' }} />
 ```
 
-when `List` is memoized and the inline object causes expensive work on every parent render.
+Se `Lista` depende de igualdade referencial (por exemplo, usa `React.memo`) ou faz processamento caro, o novo objeto a cada render pode invalidar uma otimização. Sem esse contexto, memoizar pode apenas adicionar complexidade.
 
-Good pattern when profiling confirms this is the cause:
+## Boa prática: estabilizar apenas quando necessário
 
-```jsx
-const filters = useMemo(() => ({ status: 'active' }), []);
-return <List filters={filters} />;
+```tsx
+const filtrosAtivos = { status: 'ativo' } as const;
+
+function Tela() {
+  return <Lista filtros={filtrosAtivos} />;
+}
 ```
 
-For asynchronous effects, use a synchronous effect callback and handle the request lifecycle:
+Uma constante no escopo do módulo é adequada se o valor não depende de props/estado. Para valores derivados de dependências que mudam, considere `useMemo` somente se profiling ou o comportamento de um descendente memoizado justificar:
 
-```js
+```tsx
+function Tela({ status }: { status: string }) {
+  const filtros = useMemo(() => ({ status }), [status]);
+  return <Lista filtros={filtros} />;
+}
+```
+
+## Anti-pattern: callback async no effect
+
+```tsx
+useEffect(async () => {
+  const dados = await buscarDados();
+  setDados(dados);
+}, []);
+```
+
+## Boa prática: função interna e ciclo de vida explícito
+
+```tsx
 useEffect(() => {
   const controller = new AbortController();
-  loadItems({ signal: controller.signal }).catch(handleError);
+
+  async function carregar() {
+    try {
+      const dados = await buscarDados({ signal: controller.signal });
+      setDados(dados);
+    } catch (erro) {
+      if (!controller.signal.aborted) {
+        setErro(erro);
+      }
+    }
+  }
+
+  void carregar();
   return () => controller.abort();
 }, []);
 ```
 
-Do not add `useMemo`/`useCallback` everywhere. A memoized child, expensive calculation, or measured layout bottleneck should justify the added complexity.
+Adapte o exemplo à API real: trate erros, cancelamento e resultados obsoletos conforme o contrato da aplicação. Não silencie erros.
 
-## Verify
+## Layout e thread principal
 
-- Compare profiler commits and browser traces before and after using the same user journey.
-- Test state updates, navigation, loading/error states, and accessibility after changes.
-- Do not use render counts alone as proof of a user-visible improvement.
+Anti-pattern: ler `offsetHeight`, escrever estilos, e voltar a ler geometria repetidamente dentro de um loop.
+
+Boa prática: quando a medição for necessária, agrupe leituras antes das escritas, evite leituras redundantes e valide a hipótese com um trace. Para CPU longa, considere dividir o trabalho ou movê-lo para Web Worker apenas se o custo e as restrições de interação justificarem.
+
+## Validação
+
+- Reproduza a interação com a mesma rota e estado antes/depois.
+- Compare commits/custos no React Profiler e long tasks/layout no trace do navegador.
+- Teste loading, erro, cancelamento, navegação e acessibilidade.
+- Não use apenas contagem de renders como prova de melhoria perceptível.

@@ -1,6 +1,6 @@
 ---
 name: network-opportunities
-description: "Identify network latency, request volume, caching, and payload opportunities using trace evidence."
+description: "Analisa estaticamente chamadas assíncronas para encontrar cascatas evitáveis sem alterar dependências ou semântica de erros."
 agents:
   - name: claude-code
     supported: true
@@ -12,46 +12,65 @@ agents:
 
 # Network Opportunities
 
-Investigate browser network activity for a specified route and journey. Use browser traces, server logs, or existing observability; never infer a network bottleneck only from source code.
+## Papel
 
-Use static code analysis to spot sequential `await` operations and duplicate fetch sites, then verify the request timeline at runtime.
+Analise o código-fonte para localizar chamadas assíncronas sequenciais e duplicadas. Esta é uma auditoria estática: confirme dependências entre resultados no código e valide a waterfall real com `network-profiler` antes de afirmar o impacto em runtime.
 
-## Inspect
+## O que procurar
 
-- Record the route, cache state, viewport, network profile, and whether the test is a cold or warm load.
-- Group requests by criticality, origin, type, size, duration, and initiator.
-- Look for request waterfalls, serialized dependencies, duplicate fetches, oversized responses, redirects, and unnecessary third-party origins.
-- Check response cache headers and application caching behavior without exposing credentials or sensitive response data.
-- In source code, find independent requests awaited one after another. Confirm that neither request depends on the other's result before recommending parallel execution.
+- Vários `await` consecutivos no mesmo fluxo.
+- Se a segunda chamada usa de fato o resultado da primeira, incluindo identificadores, autorização, parâmetros ou estado atualizado.
+- Chamadas idênticas concorrentes em componentes/efeitos distintos.
+- Semântica de falha, cancelamento, retry e tratamento de resultados parciais.
 
-Bad pattern for independent requests:
+## Anti-pattern: sequência independente
 
-```js
-const profile = await getProfile();
-const alerts = await getAlerts();
+```typescript
+const usuario = await buscarUsuario();
+const permissoes = await buscarPermissoes(); // Independente de usuario!
 ```
 
-Good pattern when both calls can safely run at the same time:
+Se `buscarPermissoes()` realmente não depende do usuário e ambas as chamadas devem ter sucesso para continuar, a espera sequencial pode ser evitável.
 
-```js
-const [profile, alerts] = await Promise.all([
-  getProfile(),
-  getAlerts()
+## Boa prática: executar em paralelo
+
+```typescript
+const [usuario, permissoes] = await Promise.all([
+  buscarUsuario(),
+  buscarPermissoes()
 ]);
 ```
 
-Keep sequential awaits when the second request needs an identifier or value returned by the first. Use `Promise.allSettled` only when partial results are useful and the interface handles failures explicitly.
+Só aplique quando as operações são independentes e a falha de qualquer uma deve rejeitar o conjunto. `Promise.all` rejeita assim que uma Promise falha; não descarte a estratégia de erro existente.
 
-## Recommend
+Quando resultados parciais forem válidos para a interface, avalie `Promise.allSettled` e trate explicitamente cada falha:
 
-- Remove requests only after confirming the data or resource is not needed.
-- Reduce payloads through appropriate compression, pagination, responsive assets, or selective fields.
-- Parallelize independent requests while preserving dependent ordering and error semantics.
-- Use caching with explicit freshness and invalidation rules; do not cache personalized or sensitive data publicly.
-- Consider preconnect or preload only for resources proven to be critical and used on the measured route.
-- Avoid speculative prefetching that increases bandwidth or server load without evidence of likely use.
+```typescript
+const resultados = await Promise.allSettled([
+  buscarUsuario(),
+  buscarPermissoes()
+]);
+```
 
-## Verify
+## Anti-pattern: paralelizar uma dependência real
 
-- Compare request count, transferred bytes, waterfall timing, and user-facing metrics under matching conditions.
-- Test cache misses, stale data, offline/error responses, and authenticated flows where applicable.
+```typescript
+const [usuario, perfil] = await Promise.all([
+  buscarUsuario(),
+  buscarPerfilDoUsuario() // Precisa do ID retornado por buscarUsuario()
+]);
+```
+
+## Boa prática: manter a ordem dependente
+
+```typescript
+const usuario = await buscarUsuario();
+const perfil = await buscarPerfilDoUsuario(usuario.id);
+```
+
+## Boas práticas
+
+- Separe o que é comprovado no código do que precisa de confirmação em trace.
+- Preserve retries, cancelamento, ordenação e tratamento de erros.
+- Não use `allSettled` para esconder falhas que deveriam interromper a operação.
+- Confira a aba Network para demonstrar redução real da cascata e teste estados de sucesso parcial/total.

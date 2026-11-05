@@ -1,6 +1,6 @@
 ---
 name: memory-leak-diagnostic
-description: "Diagnose suspected browser memory growth through repeatable heap and lifecycle evidence."
+description: "Investiga crescimento persistente de memória e retenção de objetos com heap snapshots e análise de lifecycle."
 agents:
   - name: claude-code
     supported: true
@@ -12,50 +12,68 @@ agents:
 
 # Memory Leak Diagnostic
 
-Investigate suspected client-side memory leaks using repeatable browser measurements and lifecycle evidence. Distinguish a leak from normal caching, garbage-collection timing, and one-time initialization.
+## Papel
 
-This is a runtime diagnosis. Use browser heap snapshots and allocation/retainer evidence; static inspection identifies candidates but does not prove a leak.
+Investigue suspeitas de fuga de memória com uma jornada reproduzível e evidência de runtime. Uma inspeção estática pode encontrar recursos sem cleanup, mas só uma retenção persistente ajuda a confirmar a fuga.
 
-## Reproduce and measure
+## Procedimento de diagnóstico
 
-1. Define a repeatable journey such as opening and closing a route, dialog, or data view.
-2. Capture a baseline heap snapshot, repeat the journey several times, allow cleanup/garbage collection when the tooling permits, and capture another snapshot.
-3. Compare retained objects and retaining paths rather than relying on a single memory graph reading.
-4. Record browser, build, data volume, interaction count, and whether the growth stabilizes across repeated cycles.
+1. Defina uma sequência repetível, como abrir/fechar uma tela ou montar/desmontar um componente.
+2. Registre browser, build, quantidade de dados, número de ciclos e baseline de memória.
+3. Capture heap snapshots antes e depois de repetir a sequência; use allocation timeline/retainers quando disponível.
+4. Permita coleta de lixo quando a ferramenta suportar e compare ciclos equivalentes.
+5. Procure crescimento que persiste após ciclos repetidos e identifique o retaining path. Distingua-o de cache intencional, aquecimento e coleta de lixo tardia.
 
-## Inspect likely retention paths
+## Recursos a inspecionar
 
-- Event listeners, timers, observers, and subscriptions that are not cleaned up.
-- Detached DOM nodes retained by closures or long-lived references.
-- Unbounded caches, global stores, and collections that grow with each navigation or interaction.
-- Async callbacks or effects that outlive the component or owner that created them.
-- Large object graphs retained by debugging tools or development-only instrumentation.
+- Event listeners de `window`, `document` e elementos DOM adicionados em effects sem remoção.
+- `setInterval` e `setTimeout` sem `clearInterval`/`clearTimeout` quando o owner desmonta ou a operação deixa de ser necessária.
+- `ResizeObserver`, `MutationObserver` e observers sem `disconnect()`.
+- Subscrições, incluindo WebSockets, stores e event emitters, sem unsubscribe/close adequado.
+- Closures, caches ou stores globais que retêm dados e componentes.
+- Detached DOM nodes com retaining paths ligados a listeners, closures ou coleções.
 
-Inspect React effects for event listeners registered on `window` or `document` without a matching cleanup:
+## Anti-pattern: listener sem cleanup
 
-Bad pattern:
-
-```js
+```tsx
 useEffect(() => {
-  window.addEventListener('resize', handleResize);
+  window.addEventListener('resize', atualizarLayout);
+}, []); // Listener continua registrado após o unmount.
+```
+
+## Boa prática: cleanup pareado
+
+```tsx
+useEffect(() => {
+  window.addEventListener('resize', atualizarLayout);
+
+  return () => {
+    window.removeEventListener('resize', atualizarLayout);
+  };
 }, []);
 ```
 
-Good pattern:
+Use a mesma referência de função e opções ao remover o listener. Para timers, limpe o identificador criado; para observers, chame `disconnect()`; para subscriptions, use o mecanismo de unsubscribe/close fornecido pela API.
 
-```js
+## Timer e WebSocket
+
+```tsx
 useEffect(() => {
-  window.addEventListener('resize', handleResize);
-  return () => window.removeEventListener('resize', handleResize);
-}, []);
+  const timer = window.setInterval(atualizarDados, 5_000);
+  const socket = new WebSocket(url);
+
+  return () => {
+    window.clearInterval(timer);
+    socket.close();
+  };
+}, [url]);
 ```
 
-Apply the same lifecycle check to `setInterval`/`setTimeout`, `ResizeObserver`/`MutationObserver`, subscriptions, and imperative DOM nodes. Verify that cleanup uses the same listener/options or disconnects/clears the exact resource that was created. Look for detached DOM nodes retained through closures or global collections in heap snapshot retaining paths.
+Adapte ao lifecycle da aplicação: trate erros/fechamento do socket e não feche uma conexão compartilhada que pertença a outro owner.
 
-## Fix and verify
+## Validação
 
-- Follow the framework's lifecycle and cleanup patterns; keep cleanup paired with resource registration.
-- Bound caches and collections where unbounded growth is not intentional.
-- Preserve in-flight request and subscription semantics when cancelling or disposing.
-- Re-run the same journey and compare retained objects and heap trends after repeated cycles.
-- Test remounting, navigation, and rapid interactions. Report evidence and uncertainty; do not label expected cache warm-up as a leak without a persistent retaining path.
+- Reproduza a mesma sequência antes/depois e compare heap, objetos retidos e retaining paths após vários ciclos.
+- Teste remount, navegação, unmount durante operação e interações rápidas.
+- Não classifique crescimento inicial que estabiliza como leak sem evidência de retenção.
+- Documente condições, medições e limitações; evite compartilhar heap snapshots com dados sensíveis.
