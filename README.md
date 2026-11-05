@@ -1,4 +1,4 @@
-# performance-auditor
+# @lib-core-mfe/performance-auditor
 
 `performance-auditor` is a skill pack for AI coding agents. It installs instructions that Claude Code, Cursor, or Codex can load and use to investigate web performance.
 
@@ -16,21 +16,21 @@ The executable is available as `perfom-audit` (the original command spelling) an
 Install globally only on a machine/environment where a supported AI agent is available. The agent can run the installer in a project to make a skill available to itself:
 
 ```sh
-npm install --global performance-auditor
+npm install --global @lib-core-mfe/performance-auditor
 ```
 
-The npm package is published as `performance-auditor`; `perfom-audit` is its CLI command. If the npm package is instead published under the name `perfom-audit`, the equivalent install command is `npm install --global perfom-audit`. Installing this package on a machine without an AI agent does not perform an audit.
+The npm package is published as `@lib-core-mfe/performance-auditor`; `perfom-audit` and `performance-auditor` are its CLI commands. Installing this package on a machine without an AI agent does not perform an audit.
 
 You can also install it in a project:
 
 ```sh
-npm install --save-dev performance-auditor
+npm install --save-dev @lib-core-mfe/performance-auditor
 ```
 
 Or run it without adding a project dependency:
 
 ```sh
-npx performance-auditor skills install
+npx @lib-core-mfe/performance-auditor skills install
 ```
 
 ## Usage
@@ -44,13 +44,13 @@ npx perfom-audit skills install
 When an agent is setting itself up, install a skill explicitly for that agent. For example, from a Claude Code session:
 
 ```sh
-npx --yes performance-auditor skills install performance-advisor --claude
+npx --yes @lib-core-mfe/performance-auditor skills install performance-advisor --claude
 ```
 
 The installed `SKILL.md` is then available for the agent to read and follow. To install a skill in all supported agent directories instead:
 
 ```sh
-npx --yes performance-auditor skills install performance-advisor
+npx --yes @lib-core-mfe/performance-auditor skills install performance-advisor
 ```
 
 Use the corresponding flag when bootstrapping from Cursor or Codex (`--cursor` or `--codex`). You can also install multiple agent copies with more than one flag.
