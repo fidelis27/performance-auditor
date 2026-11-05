@@ -1,0 +1,30 @@
+{
+  "name": "performance-auditor",
+  "version": "1.0.0",
+  "description": "An installable web performance auditing skill pack for AI coding agents.",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "perfom-audit": "./bin/cli.js",
+    "performance-auditor": "./bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "skills/",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node bin/cli.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.3.2",
+    "commander": "^13.1.0",
+    "fs-extra": "^11.3.0",
+    "gray-matter": "^4.0.3"
+  }
+}
