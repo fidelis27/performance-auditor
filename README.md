@@ -102,3 +102,20 @@ Before installing, the CLI validates each skill's YAML frontmatter, declared ski
 npm install
 npm test
 ```
+
+## Publishing
+
+GitHub Actions runs the test suite for pull requests and pushes to `main`. Publishing runs when a GitHub Release is published. The release tag must match the package version, using the `v` prefix (for example, `v1.0.1` for version `1.0.1`).
+
+Publishing uses npm Trusted Publishing (GitHub Actions OIDC), so no long-lived npm token is stored in GitHub:
+
+1. The first package version must be published once by an npm maintainer, since npm Trusted Publisher settings are configured on the package after it exists:
+
+   ```sh
+   npm publish --access public --otp=YOUR_NPM_2FA_CODE
+   ```
+
+2. On npmjs.com, open `@lib-core-mfe/performance-auditor` package settings and add a GitHub Actions trusted publisher with repository owner `fidelis27`, repository `performance-auditor`, and workflow filename `publish.yml`. Leave the environment blank; the workflow does not use a GitHub environment.
+3. For each later version, update `version` (and the lockfile if needed) on a pull request to `main`, create a GitHub Release whose tag matches that version, and publish the release. The workflow tests and publishes the package with provenance.
+
+The workflow requires npm CLI 11.5.1 or later for OIDC trusted publishing and grants `id-token: write` only to the release publishing job.
