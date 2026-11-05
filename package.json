@@ -1,5 +1,5 @@
 {
-  "name": "performance-auditor",
+  "name": "@lib-core-mfe/performance-auditor",
   "version": "1.0.0",
   "description": "An installable web performance auditing skill pack for AI coding agents.",
   "license": "MIT",
