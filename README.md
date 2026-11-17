@@ -41,16 +41,22 @@ From an agent's terminal or shell, run the installer in the project the agent sh
 npx perfom-audit skills install
 ```
 
-When an agent is setting itself up, install a skill explicitly for that agent. For example, from a Claude Code session:
+When an agent is setting itself up, the interactive prompts are not available, so install skills non-interactively. To install the whole catalog for Claude Code (recommended, since `performance-advisor` routes work to the specialist skills):
 
 ```sh
-npx --yes @lib-core-mfe/performance-auditor skills install performance-advisor --claude
+npx --yes @lib-core-mfe/performance-auditor skills install --all --claude
 ```
 
-The installed `SKILL.md` is then available for the agent to read and follow. To install a skill in all supported agent directories instead:
+To install only specific skills, list their IDs:
 
 ```sh
-npx --yes @lib-core-mfe/performance-auditor skills install performance-advisor
+npx --yes @lib-core-mfe/performance-auditor skills install performance-advisor network-profiler --claude
+```
+
+The installed `SKILL.md` files are then available for the agent to read and follow. Installing `performance-advisor` alone is possible, but the specialist skills it routes to will not be available. To install in all supported agent directories instead, omit the agent flag:
+
+```sh
+npx --yes @lib-core-mfe/performance-auditor skills install --all
 ```
 
 Use the corresponding flag when bootstrapping from Cursor or Codex (`--cursor` or `--codex`). You can also install multiple agent copies with more than one flag.
@@ -70,7 +76,7 @@ npx perfom-audit skills install performance-advisor --global
 npx perfom-audit skills install performance-advisor --claude --force
 ```
 
-When a skill ID is provided without an agent flag, it is installed for all three agents. In interactive mode, select both the skills and agents from the prompts.
+When skill IDs or `--all` are provided without an agent flag, the skills are installed for all three agents. `--all` cannot be combined with explicit skill IDs. In interactive mode, select both the skills and agents from the prompts.
 
 ## Using the skills
 
